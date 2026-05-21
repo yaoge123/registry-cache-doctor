@@ -1,0 +1,52 @@
+# Example docker-compose for running registry-cache-doctor as a
+# scheduled daemon next to one or more distribution registries.
+#
+# Adjust:
+#   * The `image:` reference if you publish a custom build.
+#   * The `networks:` block to match the network your registry
+#     containers and their Redis instances live on. Every registry
+#     declared in registry-cache-doctor.toml must be reachable via
+#     this network.
+#   * The `volumes:` mounts so each `storage_path` from
+#     registry-cache-doctor.toml resolves to the same path inside
+#     the rcd container. Read-only is enough for scan; clean does
+#     not touch storage either.
+#
+# Usage:
+#   docker compose -f examples/docker-compose.yml up -d
+#   docker logs -f registry-cache-doctor
+#
+# Logs are written to stdout/stderr in NDJSON form so the standard
+# `docker logs` toolchain (Filebeat, Loki, OpenSearch, etc.) can
+# consume them without extra wiring.
+
+services:
+  registry-cache-doctor:
+    image: registry-cache-doctor:local
+    container_name: registry-cache-doctor
+    command: daemon
+    restart: unless-stopped
+    environment:
+      # Cron expression for the scheduled scan. Defaults to
+      # `0 3 * * *` (daily at 03:00) if unset.
+      RCD_SCHEDULE: "0 3 * * *"
+      # When `true`, the daemon also runs `clean --apply` on the
+      # same schedule. Off by default.
+      RCD_DAEMON_AUTO_CLEAN: "false"
+    volumes:
+      # Configuration (read-only).
+      - ./registry-cache-doctor.toml:/etc/rcd/config.toml:ro
+      # Blob storage tree(s). Mount each registry's <rootdirectory>
+      # at the same path it has on the host, matching the
+      # `storage_path` field in the TOML config.
+      - /var/lib/registry:/var/lib/registry:ro
+    networks:
+      - registry-net
+
+networks:
+  # Replace with the network your registry / redis stack already uses.
+  # `external: true` reuses an existing network instead of creating a
+  # new one.
+  registry-net:
+    external: true
+    name: my-registry-net

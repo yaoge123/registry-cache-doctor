@@ -1,0 +1,85 @@
+# registry-cache-doctor configuration template.
+#
+# Copy this file to `registry-cache-doctor.toml` and edit it for your
+# environment. The default search path is, in order:
+#
+#   1. The path passed via `--config`
+#   2. The path in the `RCD_CONFIG` environment variable
+#   3. `./registry-cache-doctor.toml`
+#   4. `~/.config/registry-cache-doctor/config.toml`
+#
+# Any field commented out below uses its built-in default.
+
+schema_version = 1
+
+# Default Docker network the tool joins when invoked through the
+# example docker-compose.yml. A `[[registry]]` entry can override
+# this per registry via its own `network = "..."` field.
+network = "my-registry-net"
+
+# ----- Redis client tuning ---------------------------------------------------
+[redis]
+db = 0
+socket_timeout = 10
+socket_connect_timeout = 5
+# SCAN cursor batch size. Larger = fewer round-trips, but each batch
+# blocks the Redis single thread for longer.
+scan_count = 1000
+# How many `(SREM, DEL, HDEL)` triplets to send per pipeline flush
+# during `clean`. 200 triplets = 600 commands per batch.
+pipeline_batch = 200
+
+# ----- Scan options ----------------------------------------------------------
+[scan]
+# 0 = scan all enabled registries in parallel.
+# Any positive integer caps concurrency at that number.
+parallel = 0
+# Recompute sha256 of each blob to detect digest mismatches.
+# Expensive (re-reads the entire blob); leave off for routine use.
+verify_digest = false
+
+# ----- Clean options ---------------------------------------------------------
+[clean]
+# When true, unrecoverable cleanup failures bump the exit code to 4.
+strict = false
+# How many times to retry the failed (repo, digest) pairs from a batch.
+retry = 1
+# Whether to clear the C1/C2/C3/C6 "internal garbage" categories in
+# addition to the C4/C5 real-failure categories. C7 is never touched.
+clear_internal_garbage = true
+
+# ----- Daemon options --------------------------------------------------------
+[daemon]
+# Cron expression understood by supercronic (5- or 6-field, with
+# named macros such as @daily). Default: every day at 03:00.
+schedule = "0 3 * * *"
+# Whether to automatically run `clean --apply` after each scan.
+# Off by default: `clean` is destructive and benefits from review.
+auto_clean = false
+strict = false
+
+# ----- Output ----------------------------------------------------------------
+[output]
+quiet = false
+no_color = false
+# When true, scan events include a (capped) list of digests per
+# category. Off by default; use `rcd inspect` for full detail.
+include_digest_list = false
+
+# ----- Registries ------------------------------------------------------------
+# Each registry instance gets one [[registry]] block.
+# Replace the placeholder values with your real ones.
+#
+# `storage_path` must be the host-side path that maps to the
+# `<rootdirectory>` of the distribution config inside the registry
+# container. Mount it into the rcd container with `-v` (read-only is
+# fine — `rcd` never writes to the storage tree).
+
+[[registry]]
+name = "my-registry"
+redis_host = "my-registry-redis"
+redis_port = 6379
+storage_path = "/var/lib/registry"
+# redis_password = ""
+# enabled = true
+# network = "my-registry-net"  # override top-level `network`

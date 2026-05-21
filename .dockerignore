@@ -1,0 +1,28 @@
+# Source-control / dev tooling
+.git/
+.github/
+.gitignore
+.editorconfig
+
+# Tests / docs / examples (not needed inside the runtime image)
+tests/
+docs/
+examples/
+*.md
+!README.md
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Local config overrides
+*.local.toml
+docker-compose.override.yml
