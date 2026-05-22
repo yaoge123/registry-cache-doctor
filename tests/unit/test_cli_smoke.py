@@ -35,14 +35,19 @@ def test_cli_version_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == rcd.__version__
 
 
-@pytest.mark.parametrize("command", ["daemon"])
-def test_cli_pending_subcommands_exit_nonzero(
+@pytest.mark.parametrize("command", ["bogus", "daemon"])
+def test_cli_unknown_subcommand_argparse_error(
     command: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main([command]) == 1
+    """``daemon`` is provided by the container entrypoint, not the CLI."""
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([command])
+    # argparse exits with status 2 for argument errors.
+    assert excinfo.value.code == 2
     captured = capsys.readouterr()
-    assert "not implemented" in captured.err
+    assert "invalid choice" in captured.err
 
 
 def test_cli_module_entrypoint() -> None:

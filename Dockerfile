@@ -16,7 +16,7 @@ FROM python:3.13-alpine AS runtime
 # supercronic provides the daemon entrypoint when invoked as `daemon`.
 # Pin a known-good release for reproducibility.
 ARG SUPERCRONIC_VERSION=v0.2.30
-ARG SUPERCRONIC_SHA256=4d31bbf3b66ac90d2d8cc44eb5e80930c4d3186c30d73b7b41b5fbd2058edc70
+ARG SUPERCRONIC_SHA256=55f3a65b6ef29856d948230a96448f6ec7376d39fca367fae49d2512167e29e5
 
 RUN apk add --no-cache curl tini ca-certificates \
     && curl -fsSL -o /usr/local/bin/supercronic \

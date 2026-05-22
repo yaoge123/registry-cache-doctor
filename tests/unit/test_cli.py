@@ -1,4 +1,4 @@
-"""Phase 5 CLI tests for ``rcd scan / clean / inspect / daemon``.
+"""Phase 5 CLI tests for ``rcd scan / clean / inspect``.
 
 These tests inject fakes for the redis client factory and the storage
 filesystem so the CLI can be exercised without contacting a real
@@ -103,10 +103,12 @@ def test_version_subcommand_prints_version(capsys: pytest.CaptureFixture[str]) -
     assert capsys.readouterr().out.strip()
 
 
-def test_daemon_still_pending(capsys: pytest.CaptureFixture[str]) -> None:
-    # Phase 6 will implement daemon; for Phase 5 it must still exit 1.
-    assert main(["daemon"]) == 1
-    assert "not implemented" in capsys.readouterr().err
+def test_daemon_is_not_a_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
+    """``daemon`` is provided by the container entrypoint, not the CLI."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["daemon"])
+    assert excinfo.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

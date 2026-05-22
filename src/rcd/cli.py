@@ -8,7 +8,11 @@ Subcommands:
 * ``inspect`` — print one NDJSON ``inspect`` event per issue in a single
                 registry, optionally including the list of referencing
                 repositories.
-* ``daemon``  — Phase 6 will implement; for now exits 1.
+
+The ``daemon`` mode is provided by the container image's entrypoint
+script (``entrypoint.sh``) which schedules ``rcd scan`` (and optionally
+``rcd clean --apply``) via supercronic. There is no ``rcd daemon``
+subcommand; run the container with ``daemon`` as its argument instead.
 
 Exit codes (machine-readable contract):
 
@@ -53,7 +57,6 @@ EXIT_DRIFT = 2
 EXIT_STRICT_REAL_FAILURE = 3
 EXIT_STRICT_CLEAN_FAILED = 4
 
-_PENDING = ("daemon",)
 _REAL_FAILURES = (Category.C4, Category.C5)
 
 
@@ -133,7 +136,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Include the list of repositories referencing each digest.",
     )
 
-    sub.add_parser("daemon", help="(not yet implemented)")
     return parser
 
 
@@ -396,13 +398,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in (None, "version"):
         print(__version__)
         return EXIT_OK
-
-    if args.command in _PENDING:
-        print(
-            f"rcd: subcommand '{args.command}' is not implemented in v{__version__}.",
-            file=sys.stderr,
-        )
-        return EXIT_TOOL_ERROR
 
     log = _stderr_log(args)
     try:
