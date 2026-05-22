@@ -35,7 +35,7 @@ def test_cli_version_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == rcd.__version__
 
 
-@pytest.mark.parametrize("command", ["scan", "clean", "inspect", "daemon"])
+@pytest.mark.parametrize("command", ["daemon"])
 def test_cli_pending_subcommands_exit_nonzero(
     command: str,
     capsys: pytest.CaptureFixture[str],

@@ -10,6 +10,7 @@ import pytest
 from rcd.classifier import Category, Classification, Issue
 from rcd.output.ndjson import (
     emit_clean_completed,
+    emit_inspect,
     emit_run_summary,
     emit_scan_completed,
 )
@@ -186,3 +187,68 @@ def test_run_id_must_be_a_single_safe_token(bad_run_id: str) -> None:
 
     with pytest.raises(ValueError):
         emit_scan_completed(buf, report=report, run_id=bad_run_id)
+
+
+def test_inspect_event_shape() -> None:
+    buf = io.StringIO()
+    issue = Issue(
+        category=Category.C5,
+        digest="sha256:" + "ab" * 32,
+        repo="library/alpine",
+        redis_size=7232,
+        fs_size=374,
+    )
+
+    emit_inspect(buf, run_id="r", registry="myreg", issue=issue)
+
+    obj = _decode_one(buf)
+    assert obj["schema_version"] == 1
+    assert obj["tool"] == "rcd"
+    assert obj["event"] == "inspect"
+    assert obj["registry"] == "myreg"
+    assert obj["category"] == "c5"
+    assert obj["digest"] == "sha256:" + "ab" * 32
+    assert obj["repo"] == "library/alpine"
+    assert obj["redis_size"] == 7232
+    assert obj["fs_size"] == 374
+    assert "refs" not in obj
+
+
+def test_inspect_event_includes_refs_when_provided() -> None:
+    buf = io.StringIO()
+    issue = Issue(
+        category=Category.C1,
+        digest="sha256:" + "cd" * 32,
+        repo=None,
+        redis_size=1024,
+        fs_size=None,
+    )
+
+    emit_inspect(
+        buf,
+        run_id="r",
+        registry="myreg",
+        issue=issue,
+        refs=("library/alpine", "library/busybox"),
+    )
+
+    obj = _decode_one(buf)
+    assert obj["repo"] is None
+    assert obj["fs_size"] is None
+    assert obj["refs"] == ["library/alpine", "library/busybox"]
+
+
+def test_inspect_event_with_empty_refs_still_emits_field() -> None:
+    buf = io.StringIO()
+    issue = Issue(
+        category=Category.C1,
+        digest="sha256:" + "ef" * 32,
+        repo=None,
+        redis_size=512,
+        fs_size=None,
+    )
+
+    emit_inspect(buf, run_id="r", registry="myreg", issue=issue, refs=())
+
+    obj = _decode_one(buf)
+    assert obj["refs"] == []

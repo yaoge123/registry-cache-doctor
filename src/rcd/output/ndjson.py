@@ -19,15 +19,16 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import IO, Any
 
-from rcd.classifier import Category
+from rcd.classifier import Category, Issue
 from rcd.report import RegistryReport
 from rcd.version import __version__
 
 __all__ = [
     "emit_clean_completed",
+    "emit_inspect",
     "emit_run_summary",
     "emit_scan_completed",
 ]
@@ -141,4 +142,38 @@ def emit_clean_completed(
         "retried": retried,
         "duration_s": round(duration_s, 3),
     }
+    _write(stream, obj)
+
+
+def emit_inspect(
+    stream: IO[str],
+    *,
+    run_id: str,
+    registry: str,
+    issue: Issue,
+    refs: Sequence[str] | None = None,
+) -> None:
+    """Emit a single ``inspect`` event describing a classified issue.
+
+    ``refs`` is the optional list of repositories referencing the digest;
+    when provided (even when empty), it is included as ``refs`` in the
+    output to make ``--with-refs`` consumers' filtering deterministic.
+    """
+    _validate_run_id(run_id)
+    obj: dict[str, Any] = {
+        "schema_version": _SCHEMA_VERSION,
+        "ts": _now_iso_z(),
+        "run_id": run_id,
+        "tool": _TOOL,
+        "version": __version__,
+        "event": "inspect",
+        "registry": registry,
+        "category": issue.category.value,
+        "digest": issue.digest,
+        "repo": issue.repo,
+        "redis_size": issue.redis_size,
+        "fs_size": issue.fs_size,
+    }
+    if refs is not None:
+        obj["refs"] = list(refs)
     _write(stream, obj)
