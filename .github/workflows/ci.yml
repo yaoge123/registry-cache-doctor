@@ -65,6 +65,12 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: registry-cache-doctor:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke test (version + scan --help)
+        run: |
+          docker run --rm registry-cache-doctor:ci version
+          docker run --rm registry-cache-doctor:ci --version
+          docker run --rm registry-cache-doctor:ci scan --help
