@@ -49,13 +49,19 @@ retry = 1
 clear_internal_garbage = true
 
 # ----- Daemon options --------------------------------------------------------
+# Daemon scheduling and auto-clean are *deployment-level* concerns, set via
+# the container's environment variables (consumed by entrypoint.sh):
+#
+#   RCD_SCHEDULE             cron expression supercronic understands
+#                            (default: "0 3 * * *", daily at 03:00)
+#   RCD_DAEMON_AUTO_CLEAN    "true" to append `clean --apply` after each scan
+#                            (default: "false", scan-only)
+#
+# Only behavioural switches that should travel with the configuration belong
+# here. Setting `schedule` or `auto_clean` in TOML is rejected as an error
+# to avoid silent precedence surprises.
 [daemon]
-# Cron expression understood by supercronic (5- or 6-field, with
-# named macros such as @daily). Default: every day at 03:00.
-schedule = "0 3 * * *"
-# Whether to automatically run `clean --apply` after each scan.
-# Off by default: `clean` is destructive and benefits from review.
-auto_clean = false
+# When true, treat C4/C5 real failures and clean failures as strict (exit 3/4).
 strict = false
 
 # ----- Output ----------------------------------------------------------------

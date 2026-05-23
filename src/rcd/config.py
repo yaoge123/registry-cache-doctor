@@ -78,10 +78,15 @@ class CleanOptions:
 
 @dataclass(frozen=True, slots=True)
 class DaemonOptions:
-    """Tunables for the ``daemon`` subcommand."""
+    """Daemon-mode tunables that belong in the config file.
 
-    schedule: str = "0 3 * * *"
-    auto_clean: bool = False
+    Schedule and auto-clean are *not* configured here: they are deployment-
+    level concerns set via container environment variables (``RCD_SCHEDULE``
+    and ``RCD_DAEMON_AUTO_CLEAN``) consumed by ``entrypoint.sh``. Only
+    behavioural switches that should travel with the configuration belong
+    in this section.
+    """
+
     strict: bool = False
 
 
@@ -152,7 +157,7 @@ _KNOWN_REDIS_KEYS = frozenset(
 )
 _KNOWN_SCAN_KEYS = frozenset({"parallel", "verify_digest"})
 _KNOWN_CLEAN_KEYS = frozenset({"strict", "retry", "clear_internal_garbage"})
-_KNOWN_DAEMON_KEYS = frozenset({"schedule", "auto_clean", "strict"})
+_KNOWN_DAEMON_KEYS = frozenset({"strict"})
 _KNOWN_OUTPUT_KEYS = frozenset({"quiet", "no_color", "include_digest_list"})
 
 
@@ -284,8 +289,6 @@ def _clean_options(section: Mapping[str, Any]) -> CleanOptions:
 def _daemon_options(section: Mapping[str, Any]) -> DaemonOptions:
     _reject_unknown(section, _KNOWN_DAEMON_KEYS, where="[daemon]")
     return DaemonOptions(
-        schedule=str(section.get("schedule", "0 3 * * *")),
-        auto_clean=bool(section.get("auto_clean", False)),
         strict=bool(section.get("strict", False)),
     )
 

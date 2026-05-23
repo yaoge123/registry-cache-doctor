@@ -53,8 +53,6 @@ retry = 2
 clear_internal_garbage = false
 
 [daemon]
-schedule = "*/15 * * * *"
-auto_clean = true
 strict = true
 
 [output]
@@ -114,9 +112,7 @@ def test_load_full_config_populates_every_field(tmp_path: Path) -> None:
     )
     assert cfg.scan == ScanOptions(parallel=4, verify_digest=True)
     assert cfg.clean == CleanOptions(strict=True, retry=2, clear_internal_garbage=False)
-    assert cfg.daemon == DaemonOptions(
-        schedule="*/15 * * * *", auto_clean=True, strict=True
-    )
+    assert cfg.daemon == DaemonOptions(strict=True)
     assert cfg.output == OutputOptions(
         quiet=True, no_color=True, include_digest_list=True
     )
@@ -220,6 +216,27 @@ def test_unknown_redis_key_raises(tmp_path: Path) -> None:
         'schema_version = 1\n[redis]\nbogus = 1',
     )
     with pytest.raises(ConfigError, match="bogus"):
+        load_config(_write(tmp_path, body))
+
+
+def test_daemon_schedule_no_longer_accepted(tmp_path: Path) -> None:
+    # ``schedule`` is now controlled by RCD_SCHEDULE; reject it in TOML so the
+    # user is not surprised when an in-file value silently has no effect.
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        'schema_version = 1\n[daemon]\nschedule = "0 4 * * *"',
+    )
+    with pytest.raises(ConfigError, match="schedule"):
+        load_config(_write(tmp_path, body))
+
+
+def test_daemon_auto_clean_no_longer_accepted(tmp_path: Path) -> None:
+    # ``auto_clean`` is now controlled by RCD_DAEMON_AUTO_CLEAN.
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        "schema_version = 1\n[daemon]\nauto_clean = true",
+    )
+    with pytest.raises(ConfigError, match="auto_clean"):
         load_config(_write(tmp_path, body))
 
 

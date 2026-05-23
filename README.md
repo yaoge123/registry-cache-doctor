@@ -155,8 +155,8 @@ retry = 1
 clear_internal_garbage = true        # also clean C1/C2/C3/C6, not just C4/C5
 
 [daemon]
-schedule = "0 3 * * *"
-auto_clean = false
+# Schedule and auto_clean are NOT in TOML on purpose; they are
+# deployment-level concerns set via container env vars (see Daemon mode).
 strict = false
 
 [output]

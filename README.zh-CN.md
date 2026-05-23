@@ -139,8 +139,7 @@ retry = 1
 clear_internal_garbage = true        # 一并清 C1/C2/C3/C6，不仅是 C4/C5
 
 [daemon]
-schedule = "0 3 * * *"
-auto_clean = false
+# schedule 与 auto_clean 不在 TOML，由容器环境变量驱动（见 Daemon 模式章节）。
 strict = false
 
 [output]
