@@ -34,7 +34,8 @@ COPY --from=builder /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY scripts/rcd-cron-exec.sh /usr/local/bin/rcd-cron-exec
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/rcd-cron-exec
 
 USER rcd
 

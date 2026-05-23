@@ -19,11 +19,16 @@ if [ "${1:-}" = "daemon" ]; then
     crontab_file="$(mktemp)"
     trap 'rm -f "$crontab_file"' EXIT
 
-    # Always scan; optionally also clean.
+    # Always scan; optionally also clean.  Both invocations are wrapped in
+    # rcd-cron-exec so the informational "drift detected" exit (2) is
+    # translated to 0 and supercronic does not log a misleading
+    # `level=error` line.  Genuine failures (1/3/4 etc.) propagate.
     {
-        printf '%s rcd --config %s scan\n' "$RCD_SCHEDULE" "$RCD_CONFIG"
+        printf '%s rcd-cron-exec rcd --config %s scan\n' \
+            "$RCD_SCHEDULE" "$RCD_CONFIG"
         if [ "$RCD_DAEMON_AUTO_CLEAN" = "true" ]; then
-            printf '%s rcd --config %s clean --apply\n' "$RCD_SCHEDULE" "$RCD_CONFIG"
+            printf '%s rcd-cron-exec rcd --config %s clean --apply\n' \
+                "$RCD_SCHEDULE" "$RCD_CONFIG"
         fi
     } >"$crontab_file"
 
