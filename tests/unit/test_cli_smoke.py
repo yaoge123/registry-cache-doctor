@@ -1,7 +1,6 @@
-"""Smoke tests for the Phase 0 scaffold.
+"""Smoke tests for the CLI surface.
 
-These guard the bits that ship in v0.0.0 so that later phases cannot
-regress the scaffold contract:
+These guard the bits that ship in every release:
 
 * ``rcd`` is importable
 * ``rcd --version`` and ``rcd version`` agree
@@ -10,6 +9,7 @@ regress the scaffold contract:
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 
@@ -19,8 +19,8 @@ import rcd
 from rcd.cli import main
 
 
-def test_package_importable() -> None:
-    assert rcd.__version__ == "0.0.0"
+def test_package_version_is_pep440() -> None:
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:[.+-][\w.-]+)?", rcd.__version__)
 
 
 def test_cli_no_args_prints_version(capsys: pytest.CaptureFixture[str]) -> None:

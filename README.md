@@ -4,7 +4,7 @@ Diagnose and repair Redis blob descriptor cache inconsistencies in
 [`distribution/distribution`](https://github.com/distribution/distribution)
 registries (including pull-through cache deployments).
 
-> **Status:** functionality complete; release candidate for `v0.1.0`.
+> **Status:** `v0.1.0` released. See the [CHANGELOG](CHANGELOG.md).
 > CI matrix runs on Python 3.11 / 3.12 / 3.13. See
 > [`CHANGELOG.md`](./CHANGELOG.md).
 

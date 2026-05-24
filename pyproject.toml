@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "registry-cache-doctor"
-version = "0.0.0"
+version = "0.1.0"
 description = "Diagnose and repair Redis blob descriptor cache inconsistencies in distribution registries."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,7 @@ keywords = [
     "pull-through-cache",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",

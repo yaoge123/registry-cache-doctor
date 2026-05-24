@@ -4,7 +4,7 @@
 registry 在使用 Redis 作为 blob descriptor cache 时与本地 blob 文件系统的不一致
 （含 pull-through cache 部署形态）。
 
-> **当前状态：** 功能开发完成，`v0.1.0` 候选发布版本。
+> **当前状态：** `v0.1.0` 已发布。详见 [CHANGELOG](CHANGELOG.md)。
 > CI 在 Python 3.11 / 3.12 / 3.13 上跑全套测试。
 > 见 [`CHANGELOG.md`](./CHANGELOG.md)。
 
