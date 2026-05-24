@@ -18,7 +18,9 @@ FROM python:3.13-alpine AS runtime
 ARG SUPERCRONIC_VERSION=v0.2.30
 ARG SUPERCRONIC_SHA256=55f3a65b6ef29856d948230a96448f6ec7376d39fca367fae49d2512167e29e5
 
-RUN apk add --no-cache curl tini ca-certificates \
+# tzdata ships /usr/share/zoneinfo so the standard TZ env var works without
+# needing the host to bind-mount its zoneinfo tree into the container.
+RUN apk add --no-cache curl tini ca-certificates tzdata \
     && curl -fsSL -o /usr/local/bin/supercronic \
         "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-amd64" \
     && echo "${SUPERCRONIC_SHA256}  /usr/local/bin/supercronic" | sha256sum -c - \
