@@ -136,10 +136,8 @@ else has defaults):
 
 ```toml
 schema_version = 1
-network = "my-registry-net"          # consumed by docker-compose; ignored by rcd
 
 [redis]
-db = 0
 socket_timeout = 10
 socket_connect_timeout = 5
 scan_count = 1000
@@ -150,6 +148,9 @@ parallel = 0                         # 0 = number of enabled registries
 verify_digest = false
 
 [clean]
+# When true, `clean` exits 4 if any entry could not be removed even
+# after retries. When false (default), permanent failures are still
+# logged but do not change the exit code.
 strict = false
 retry = 1
 clear_internal_garbage = true        # also clean C1/C2/C3/C6, not just C4/C5
@@ -157,6 +158,8 @@ clear_internal_garbage = true        # also clean C1/C2/C3/C6, not just C4/C5
 [daemon]
 # Schedule and auto_clean are NOT in TOML on purpose; they are
 # deployment-level concerns set via container env vars (see Daemon mode).
+# When true, the scheduled `scan` exits 3 on any C4/C5 real failure, and
+# the scheduled `clean --apply` exits 4 on permanent clean failure.
 strict = false
 
 [output]
@@ -168,6 +171,9 @@ include_digest_list = false
 name = "my-registry"
 redis_host = "my-registry-redis"
 redis_port = 6379
+# `storage_path` is the path visible **inside the rcd container**. Mount
+# the host's distribution storage tree with `-v <host>:<host>:ro` and
+# put the same path here; it must match the registry's `<rootdirectory>`.
 storage_path = "/var/lib/registry"
 # redis_password = "..."
 # redis_db = 0

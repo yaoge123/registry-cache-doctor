@@ -120,10 +120,8 @@ docker compose -f examples/docker-compose.yml up -d
 
 ```toml
 schema_version = 1
-network = "my-registry-net"          # 给 docker-compose 用，rcd 忽略
 
 [redis]
-db = 0
 socket_timeout = 10
 socket_connect_timeout = 5
 scan_count = 1000
@@ -134,12 +132,16 @@ parallel = 0                         # 0 = 启用 registry 个数
 verify_digest = false
 
 [clean]
+# true 时若有清理项重试后仍失败，`clean` 退出 4；false（默认）下永久
+# 失败仍会记录但不影响退出码。
 strict = false
 retry = 1
 clear_internal_garbage = true        # 一并清 C1/C2/C3/C6，不仅是 C4/C5
 
 [daemon]
 # schedule 与 auto_clean 不在 TOML，由容器环境变量驱动（见 Daemon 模式章节）。
+# true 时 daemon 调度的 `scan` 在出现 C4/C5 真故障时退出 3；调度的
+# `clean --apply` 在永久失败时退出 4。
 strict = false
 
 [output]
@@ -151,6 +153,9 @@ include_digest_list = false
 name = "my-registry"
 redis_host = "my-registry-redis"
 redis_port = 6379
+# `storage_path` 是 **rcd 容器内** 看到的路径。用
+# `-v <host>:<host>:ro` 把宿主机的 distribution 存储树挂入容器，
+# 然后这里写同样的路径；必须与 registry 的 `<rootdirectory>` 一致。
 storage_path = "/var/lib/registry"
 # redis_password = "..."
 # redis_db = 0

@@ -12,14 +12,8 @@
 
 schema_version = 1
 
-# Default Docker network the tool joins when invoked through the
-# example docker-compose.yml. A `[[registry]]` entry can override
-# this per registry via its own `network = "..."` field.
-network = "my-registry-net"
-
 # ----- Redis client tuning ---------------------------------------------------
 [redis]
-db = 0
 socket_timeout = 10
 socket_connect_timeout = 5
 # SCAN cursor batch size. Larger = fewer round-trips, but each batch
@@ -40,7 +34,9 @@ verify_digest = false
 
 # ----- Clean options ---------------------------------------------------------
 [clean]
-# When true, unrecoverable cleanup failures bump the exit code to 4.
+# When true, `clean` exits with code 4 if any (repo, digest) entry could
+# not be removed even after retries. When false (default), permanent
+# failures are still logged but do not affect the exit code.
 strict = false
 # How many times to retry the failed (repo, digest) pairs from a batch.
 retry = 1
@@ -61,7 +57,10 @@ clear_internal_garbage = true
 # here. Setting `schedule` or `auto_clean` in TOML is rejected as an error
 # to avoid silent precedence surprises.
 [daemon]
-# When true, treat C4/C5 real failures and clean failures as strict (exit 3/4).
+# When true, the daemon's scheduled `scan` exits 3 if it finds any C4/C5
+# real failure, and (when AUTO_CLEAN is on) exits 4 on permanent clean
+# failure. When false, the daemon stays at exit code 0 for all drift; the
+# wrapper still rewrites `2 -> 0` so cron does not log false alarms.
 strict = false
 
 # ----- Output ----------------------------------------------------------------
@@ -76,10 +75,12 @@ include_digest_list = false
 # Each registry instance gets one [[registry]] block.
 # Replace the placeholder values with your real ones.
 #
-# `storage_path` must be the host-side path that maps to the
-# `<rootdirectory>` of the distribution config inside the registry
-# container. Mount it into the rcd container with `-v` (read-only is
-# fine — `rcd` never writes to the storage tree).
+# `storage_path` is the path **as visible inside the rcd container**.
+# Mount the host's distribution storage tree into the rcd container with
+# `-v <host-path>:<host-path>:ro` (read-only is fine — `rcd` never writes
+# to the storage tree) and put that same path here. The directory must
+# match the registry's `<rootdirectory>` so `<storage_path>/docker/registry/v2/blobs/...`
+# resolves to the actual blob files.
 
 [[registry]]
 name = "my-registry"
@@ -87,5 +88,5 @@ redis_host = "my-registry-redis"
 redis_port = 6379
 storage_path = "/var/lib/registry"
 # redis_password = ""
+# redis_db = 0
 # enabled = true
-# network = "my-registry-net"  # override top-level `network`

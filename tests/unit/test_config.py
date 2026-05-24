@@ -34,10 +34,8 @@ storage_path = "/var/lib/registry"
 
 _FULL = """\
 schema_version = 1
-network = "rcd-net"
 
 [redis]
-db = 2
 socket_timeout = 7
 socket_connect_timeout = 3
 scan_count = 1500
@@ -68,7 +66,6 @@ redis_db = 1
 redis_password = "shh"
 storage_path = "/srv/alpha"
 enabled = false
-network = "alpha-net"
 
 [[registry]]
 name = "beta"
@@ -130,17 +127,29 @@ def test_load_full_config_populates_every_field(tmp_path: Path) -> None:
     )
 
 
-def test_top_level_network_is_ignored(tmp_path: Path) -> None:
+def test_top_level_network_now_rejected(tmp_path: Path) -> None:
+    # ``network`` was a docker-compose hint that rcd never read; it is now an
+    # error so users do not assume it has any effect on rcd itself.
     body = _MINIMAL + '\nnetwork = "ignored-by-rcd"\n'
-    cfg = load_config(_write(tmp_path, body))
-    assert cfg.registries[0].name == "alpha"
+    with pytest.raises(ConfigError, match="network"):
+        load_config(_write(tmp_path, body))
 
 
-def test_registry_level_network_is_ignored(tmp_path: Path) -> None:
+def test_registry_level_network_now_rejected(tmp_path: Path) -> None:
     body = _MINIMAL.rstrip() + '\nnetwork = "alpha-net"\n'
-    cfg = load_config(_write(tmp_path, body))
-    # No exception; the network field is silently dropped.
-    assert cfg.registries[0].name == "alpha"
+    with pytest.raises(ConfigError, match="network"):
+        load_config(_write(tmp_path, body))
+
+
+def test_redis_db_no_longer_accepted(tmp_path: Path) -> None:
+    # Redis db is selected per-registry via ``[[registry]].redis_db``. A
+    # global ``[redis].db`` was always silently dropped; reject it now.
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        "schema_version = 1\n[redis]\ndb = 5",
+    )
+    with pytest.raises(ConfigError, match="db"):
+        load_config(_write(tmp_path, body))
 
 
 def test_load_accepts_string_path(tmp_path: Path) -> None:

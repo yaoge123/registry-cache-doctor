@@ -125,7 +125,6 @@ class ConfigError(ValueError):
 _KNOWN_TOP_KEYS = frozenset(
     {
         "schema_version",
-        "network",
         "redis",
         "scan",
         "clean",
@@ -143,12 +142,10 @@ _KNOWN_REGISTRY_KEYS = frozenset(
         "redis_password",
         "storage_path",
         "enabled",
-        "network",
     }
 )
 _KNOWN_REDIS_KEYS = frozenset(
     {
-        "db",
         "socket_timeout",
         "socket_connect_timeout",
         "scan_count",
