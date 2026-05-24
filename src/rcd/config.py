@@ -1,9 +1,20 @@
 """Configuration data structures and TOML loader.
 
 Each ``[[registry]]`` table maps to one :class:`RegistryConfig`. The
-top-level option tables (``[redis]``, ``[scan]``, ``[clean]``,
-``[daemon]``, ``[output]``) map to their respective dataclasses, and
-:func:`load_config` parses a TOML file into an :class:`AppConfig`.
+top-level option tables (``[redis]``, ``[scan]``, ``[clean]``) map to
+their respective dataclasses, and :func:`load_config` parses a TOML
+file into an :class:`AppConfig`.
+
+Two kinds of configuration coexist by design:
+
+* **Deployment-level** lives in environment variables consumed by
+  ``entrypoint.sh``: ``RCD_CONFIG``, ``RCD_SCHEDULE``,
+  ``RCD_DAEMON_AUTO_CLEAN``, ``RCD_DAEMON_STRICT``. These describe how
+  the container is wired up, so they belong with the orchestrator
+  (docker-compose, k8s, etc.), not with the tool's TOML.
+* **Behaviour defaults** live in this TOML file and are overridden by
+  per-invocation CLI flags. ``[scan].strict`` and ``[clean].strict``
+  set the default for ``--strict / --no-strict``.
 """
 
 from __future__ import annotations
@@ -19,8 +30,6 @@ __all__ = [
     "AppConfig",
     "CleanOptions",
     "ConfigError",
-    "DaemonOptions",
-    "OutputOptions",
     "RedisOptions",
     "RegistryConfig",
     "ScanOptions",
@@ -61,42 +70,24 @@ class ScanOptions:
 
     ``parallel == 0`` means "auto", which the orchestrator interprets as
     "as many enabled registries as configured".
+
+    ``strict`` is the default for ``rcd scan --strict / --no-strict``.
     """
 
     parallel: int = 0
-    verify_digest: bool = False
+    strict: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class CleanOptions:
-    """Tunables for the ``clean`` subcommand."""
+    """Tunables for the ``clean`` subcommand.
+
+    ``strict`` is the default for ``rcd clean --strict / --no-strict``.
+    """
 
     strict: bool = False
     retry: int = 1
     clear_internal_garbage: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class DaemonOptions:
-    """Daemon-mode tunables that belong in the config file.
-
-    Schedule and auto-clean are *not* configured here: they are deployment-
-    level concerns set via container environment variables (``RCD_SCHEDULE``
-    and ``RCD_DAEMON_AUTO_CLEAN``) consumed by ``entrypoint.sh``. Only
-    behavioural switches that should travel with the configuration belong
-    in this section.
-    """
-
-    strict: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class OutputOptions:
-    """Tunables for stdout/stderr output."""
-
-    quiet: bool = False
-    no_color: bool = False
-    include_digest_list: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +98,6 @@ class AppConfig:
     redis: RedisOptions
     scan: ScanOptions
     clean: CleanOptions
-    daemon: DaemonOptions
-    output: OutputOptions
     registries: tuple[RegistryConfig, ...]
 
 
@@ -128,8 +117,6 @@ _KNOWN_TOP_KEYS = frozenset(
         "redis",
         "scan",
         "clean",
-        "daemon",
-        "output",
         "registry",
     }
 )
@@ -152,10 +139,8 @@ _KNOWN_REDIS_KEYS = frozenset(
         "pipeline_batch",
     }
 )
-_KNOWN_SCAN_KEYS = frozenset({"parallel", "verify_digest"})
+_KNOWN_SCAN_KEYS = frozenset({"parallel", "strict"})
 _KNOWN_CLEAN_KEYS = frozenset({"strict", "retry", "clear_internal_garbage"})
-_KNOWN_DAEMON_KEYS = frozenset({"strict"})
-_KNOWN_OUTPUT_KEYS = frozenset({"quiet", "no_color", "include_digest_list"})
 
 
 _SUPPORTED_SCHEMA_VERSION = 1
@@ -195,8 +180,6 @@ def load_config(path: str | Path) -> AppConfig:
     redis = _redis_options(raw.get("redis", {}))
     scan = _scan_options(raw.get("scan", {}))
     clean = _clean_options(raw.get("clean", {}))
-    daemon = _daemon_options(raw.get("daemon", {}))
-    output = _output_options(raw.get("output", {}))
 
     registries_raw = raw.get("registry") or []
     if not registries_raw:
@@ -210,8 +193,6 @@ def load_config(path: str | Path) -> AppConfig:
         redis=redis,
         scan=scan,
         clean=clean,
-        daemon=daemon,
-        output=output,
         registries=registries,
     )
 
@@ -268,7 +249,7 @@ def _scan_options(section: Mapping[str, Any]) -> ScanOptions:
     parallel = int(section.get("parallel", 0))
     if parallel < 0:
         raise ConfigError("[scan].parallel must be >= 0")
-    return ScanOptions(parallel=parallel, verify_digest=bool(section.get("verify_digest", False)))
+    return ScanOptions(parallel=parallel, strict=bool(section.get("strict", False)))
 
 
 def _clean_options(section: Mapping[str, Any]) -> CleanOptions:
@@ -280,22 +261,6 @@ def _clean_options(section: Mapping[str, Any]) -> CleanOptions:
         strict=bool(section.get("strict", False)),
         retry=retry,
         clear_internal_garbage=bool(section.get("clear_internal_garbage", True)),
-    )
-
-
-def _daemon_options(section: Mapping[str, Any]) -> DaemonOptions:
-    _reject_unknown(section, _KNOWN_DAEMON_KEYS, where="[daemon]")
-    return DaemonOptions(
-        strict=bool(section.get("strict", False)),
-    )
-
-
-def _output_options(section: Mapping[str, Any]) -> OutputOptions:
-    _reject_unknown(section, _KNOWN_OUTPUT_KEYS, where="[output]")
-    return OutputOptions(
-        quiet=bool(section.get("quiet", False)),
-        no_color=bool(section.get("no_color", False)),
-        include_digest_list=bool(section.get("include_digest_list", False)),
     )
 
 

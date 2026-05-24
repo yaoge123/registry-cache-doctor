@@ -33,6 +33,12 @@ services:
       # When `true`, the daemon also runs `clean --apply` on the
       # same schedule. Off by default.
       RCD_DAEMON_AUTO_CLEAN: "false"
+      # When `true`, the daemon adds `--strict` to the scheduled
+      # scan/clean so cron exits 3 / 4 on real failures (and the
+      # log pipeline can alert on it). Off by default; the wrapper
+      # still rewrites drift exit-2 to 0 so cron does not log false
+      # alarms.
+      RCD_DAEMON_STRICT: "false"
     volumes:
       # Configuration (read-only).
       - ./registry-cache-doctor.toml:/etc/rcd/config.toml:ro

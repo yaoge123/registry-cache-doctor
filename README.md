@@ -113,10 +113,8 @@ command instead — see [Daemon mode](#daemon-mode-cron) below.
 | `--config PATH` | top-level | Path to the TOML config (overrides `RCD_CONFIG` and the search path) |
 | `--parallel N` | `scan` / `clean` / `inspect` | Cap concurrent registries; `0` = number of enabled registries (default) |
 | `--no-color` | `scan` / `clean` / `inspect` | Disable ANSI colour on stderr (also honoured: `NO_COLOR=1`) |
-| `--quiet` | `scan` / `clean` / `inspect` | Suppress stderr progress / log lines |
-| `--strict` | `scan` / `clean` | Promote real failures to non-zero exit codes (see below) |
+| `--strict` / `--no-strict` | `scan` / `clean` | Override the TOML default for `strict` (see [Exit codes](#exit-codes)) |
 | `--apply` | `clean` | Actually issue Redis writes; without it `clean` is a dry-run |
-| `--verify-digest` | `scan` | Re-hash blob bytes when comparing sizes (slow) |
 | `--with-refs` | `inspect` | Include the list of repositories that reference each digest |
 | `--registry NAME` | `inspect` | Required: which registry to inspect |
 | `--category Cn` | `inspect` | Required: which category to list |
@@ -145,27 +143,18 @@ pipeline_batch = 200
 
 [scan]
 parallel = 0                         # 0 = number of enabled registries
-verify_digest = false
+# Default for `--strict / --no-strict`. When true, `scan` exits 3 on
+# any C4/C5 real failure.
+strict = false
 
 [clean]
-# When true, `clean` exits 4 if any entry could not be removed even
-# after retries. When false (default), permanent failures are still
-# logged but do not change the exit code.
+# Default for `--strict / --no-strict`. When true, `clean` exits 4 if
+# any entry could not be removed even after retries. When false
+# (default), permanent failures are still logged but do not change the
+# exit code.
 strict = false
 retry = 1
 clear_internal_garbage = true        # also clean C1/C2/C3/C6, not just C4/C5
-
-[daemon]
-# Schedule and auto_clean are NOT in TOML on purpose; they are
-# deployment-level concerns set via container env vars (see Daemon mode).
-# When true, the scheduled `scan` exits 3 on any C4/C5 real failure, and
-# the scheduled `clean --apply` exits 4 on permanent clean failure.
-strict = false
-
-[output]
-quiet = false
-no_color = false
-include_digest_list = false
 
 [[registry]]
 name = "my-registry"
@@ -205,6 +194,7 @@ docker run -d \
   -v "$PWD/registry-cache-doctor.toml:/etc/rcd/config.toml:ro" \
   -e RCD_SCHEDULE='0 3 * * *' \
   -e RCD_DAEMON_AUTO_CLEAN=false \
+  -e RCD_DAEMON_STRICT=false \
   registry-cache-doctor:local daemon
 ```
 
@@ -215,6 +205,7 @@ Environment variables consumed by the entrypoint:
 | `RCD_CONFIG` | `/etc/rcd/config.toml` | Path of the mounted config |
 | `RCD_SCHEDULE` | `0 3 * * *` | Cron expression for `rcd scan` |
 | `RCD_DAEMON_AUTO_CLEAN` | `false` | When `true`, also schedule `rcd clean --apply` on the same cron |
+| `RCD_DAEMON_STRICT` | `false` | When `true`, append `--strict` to each scheduled invocation |
 
 All output goes to the container's stdout/stderr; pick it up with
 `docker logs` or your preferred log shipper.

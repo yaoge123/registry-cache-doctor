@@ -13,14 +13,22 @@ The ``daemon`` mode is provided by the container image's entrypoint
 script (``entrypoint.sh``) which schedules ``rcd scan`` (and optionally
 ``rcd clean --apply``) via supercronic. There is no ``rcd daemon``
 subcommand; run the container with ``daemon`` as its argument instead.
+The entrypoint adds ``--strict`` automatically when the deployment
+sets ``RCD_DAEMON_STRICT=true``.
+
+Strict precedence:
+
+* ``--strict`` / ``--no-strict`` on the command line wins.
+* Otherwise the value defaults to ``[scan].strict`` or ``[clean].strict``
+  from the TOML configuration.
 
 Exit codes (machine-readable contract):
 
 * 0 — success, or only ``c7`` (self-healing) drift found.
 * 1 — tool error (config invalid, all registries failed, etc.).
 * 2 — drift detected (scan), or ``clean`` ran in dry-run with planned ops.
-* 3 — ``--strict`` and ``c4`` / ``c5`` (real failures) detected.
-* 4 — ``--strict`` and at least one cleanup operation failed.
+* 3 — strict mode and ``c4`` / ``c5`` (real failures) detected.
+* 4 — strict mode and at least one cleanup operation failed.
 """
 
 from __future__ import annotations
@@ -87,8 +95,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="Print the installed version.")
 
     def _add_common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--no-color", action="store_true", help="Disable ANSI colours on stderr.")
-        p.add_argument("--quiet", action="store_true", help="Silence stderr progress.")
+        p.add_argument(
+            "--no-color",
+            action="store_true",
+            help="Disable ANSI colours on stderr.",
+        )
         p.add_argument(
             "--parallel",
             type=int,
@@ -98,11 +109,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_scan = sub.add_parser("scan", help="Scan registries and emit NDJSON results.")
     _add_common(p_scan)
-    p_scan.add_argument("--strict", action="store_true", help="Exit 3 if c4/c5 are found.")
     p_scan.add_argument(
-        "--verify-digest",
-        action="store_true",
-        help="Recompute sha256 of files (slow).",
+        "--strict",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Exit 3 if c4/c5 are found. "
+            "Default: [scan].strict in the TOML configuration."
+        ),
     )
 
     p_clean = sub.add_parser("clean", help="Scan, then optionally clean inconsistent entries.")
@@ -114,8 +128,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_clean.add_argument(
         "--strict",
-        action="store_true",
-        help="Exit 4 if any cleanup operation failed.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Exit 4 if any cleanup operation failed. "
+            "Default: [clean].strict in the TOML configuration."
+        ),
     )
 
     p_inspect = sub.add_parser(
@@ -170,6 +188,13 @@ def _stderr_log(args: argparse.Namespace) -> StderrLog:
     return StderrLog(sys.stderr, color=use_color)
 
 
+def _resolve_strict(cli_value: bool | None, *, config_default: bool) -> bool:
+    """``--strict / --no-strict`` overrides config; ``None`` = use config."""
+    if cli_value is None:
+        return config_default
+    return cli_value
+
+
 # ---------------------------------------------------------------------------
 # scan
 # ---------------------------------------------------------------------------
@@ -183,6 +208,7 @@ def _cmd_scan(args: argparse.Namespace, *, stdout: IO[str], stderr_log: StderrLo
     factory = make_redis_factory(cfg.redis)
     parallel = args.parallel if args.parallel is not None else cfg.scan.parallel
     run_id = _new_run_id()
+    strict = _resolve_strict(args.strict, config_default=cfg.scan.strict)
 
     try:
         reports, summary = asyncio.run(
@@ -201,7 +227,7 @@ def _cmd_scan(args: argparse.Namespace, *, stdout: IO[str], stderr_log: StderrLo
         emit_scan_completed(stdout, report=report, run_id=run_id)
     emit_run_summary(stdout, run_id=run_id, duration_s=summary.duration_s, totals=summary.totals)
 
-    return _scan_exit_code(reports, summary, strict=args.strict)
+    return _scan_exit_code(reports, summary, strict=strict)
 
 
 def _scan_exit_code(reports: Sequence[Any], summary: Any, *, strict: bool) -> int:
@@ -236,6 +262,7 @@ def _cmd_clean(args: argparse.Namespace, *, stdout: IO[str], stderr_log: StderrL
     parallel = args.parallel if args.parallel is not None else cfg.scan.parallel
     run_id = _new_run_id()
     dry_run = not args.apply
+    strict = _resolve_strict(args.strict, config_default=cfg.clean.strict)
 
     try:
         reports, summary = asyncio.run(
@@ -301,7 +328,7 @@ def _cmd_clean(args: argparse.Namespace, *, stdout: IO[str], stderr_log: StderrL
         total_planned=total_planned,
         total_applied=total_applied,
         total_failed=total_failed,
-        strict=args.strict,
+        strict=strict,
     )
 
 

@@ -100,10 +100,8 @@ docker compose -f examples/docker-compose.yml up -d
 | `--config PATH` | 顶层 | TOML 配置路径（覆盖 `RCD_CONFIG` 和搜索顺序） |
 | `--parallel N` | `scan` / `clean` / `inspect` | 限制并发 registry 数；`0` = 启用 registry 个数（默认） |
 | `--no-color` | `scan` / `clean` / `inspect` | 关闭 stderr ANSI 颜色（`NO_COLOR=1` 同效） |
-| `--quiet` | `scan` / `clean` / `inspect` | 抑制 stderr 进度/日志 |
-| `--strict` | `scan` / `clean` | 真故障升级为非 0 退出码（见下文） |
+| `--strict` / `--no-strict` | `scan` / `clean` | 覆盖 TOML 中 `strict` 默认值（见 [退出码](#退出码)） |
 | `--apply` | `clean` | 实际写 Redis；不带则 dry-run |
-| `--verify-digest` | `scan` | 重算 blob sha256 而非仅比对 size（慢） |
 | `--with-refs` | `inspect` | 输出每个 digest 的引用仓库列表 |
 | `--registry NAME` | `inspect` | 必填：要查看的 registry |
 | `--category Cn` | `inspect` | 必填：要列出的分类 |
@@ -129,25 +127,16 @@ pipeline_batch = 200
 
 [scan]
 parallel = 0                         # 0 = 启用 registry 个数
-verify_digest = false
+# `--strict / --no-strict` 的默认值。true 时若 `scan` 发现 C4/C5 真故障
+# 会退出 3。
+strict = false
 
 [clean]
-# true 时若有清理项重试后仍失败，`clean` 退出 4；false（默认）下永久
-# 失败仍会记录但不影响退出码。
+# `--strict / --no-strict` 的默认值。true 时若有清理项重试后仍失败，
+# `clean` 退出 4；false（默认）下永久失败仍会记录但不影响退出码。
 strict = false
 retry = 1
 clear_internal_garbage = true        # 一并清 C1/C2/C3/C6，不仅是 C4/C5
-
-[daemon]
-# schedule 与 auto_clean 不在 TOML，由容器环境变量驱动（见 Daemon 模式章节）。
-# true 时 daemon 调度的 `scan` 在出现 C4/C5 真故障时退出 3；调度的
-# `clean --apply` 在永久失败时退出 4。
-strict = false
-
-[output]
-quiet = false
-no_color = false
-include_digest_list = false
 
 [[registry]]
 name = "my-registry"
@@ -187,6 +176,7 @@ docker run -d \
   -v "$PWD/registry-cache-doctor.toml:/etc/rcd/config.toml:ro" \
   -e RCD_SCHEDULE='0 3 * * *' \
   -e RCD_DAEMON_AUTO_CLEAN=false \
+  -e RCD_DAEMON_STRICT=false \
   registry-cache-doctor:local daemon
 ```
 
@@ -197,6 +187,7 @@ entrypoint 识别的环境变量：
 | `RCD_CONFIG` | `/etc/rcd/config.toml` | 挂载的配置路径 |
 | `RCD_SCHEDULE` | `0 3 * * *` | `rcd scan` 的 cron 表达式 |
 | `RCD_DAEMON_AUTO_CLEAN` | `false` | 设为 `true` 时同时调度 `rcd clean --apply` |
+| `RCD_DAEMON_STRICT` | `false` | 设为 `true` 时给每个调度行追加 `--strict` |
 
 所有输出走容器 stdout/stderr，用 `docker logs` 或你的日志收集器读取。
 

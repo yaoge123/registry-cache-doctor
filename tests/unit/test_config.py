@@ -10,8 +10,6 @@ from rcd.config import (
     AppConfig,
     CleanOptions,
     ConfigError,
-    DaemonOptions,
-    OutputOptions,
     RedisOptions,
     RegistryConfig,
     ScanOptions,
@@ -43,20 +41,12 @@ pipeline_batch = 250
 
 [scan]
 parallel = 4
-verify_digest = true
+strict = true
 
 [clean]
 strict = true
 retry = 2
 clear_internal_garbage = false
-
-[daemon]
-strict = true
-
-[output]
-quiet = true
-no_color = true
-include_digest_list = true
 
 [[registry]]
 name = "alpha"
@@ -91,8 +81,6 @@ def test_load_minimal_config_yields_defaults(tmp_path: Path) -> None:
     assert cfg.redis == RedisOptions()
     assert cfg.scan == ScanOptions()
     assert cfg.clean == CleanOptions()
-    assert cfg.daemon == DaemonOptions()
-    assert cfg.output == OutputOptions()
     assert cfg.registries == (
         RegistryConfig(name="alpha", redis_host="alpha-redis", storage_path="/var/lib/registry"),
     )
@@ -107,12 +95,8 @@ def test_load_full_config_populates_every_field(tmp_path: Path) -> None:
         scan_count=1500,
         pipeline_batch=250,
     )
-    assert cfg.scan == ScanOptions(parallel=4, verify_digest=True)
+    assert cfg.scan == ScanOptions(parallel=4, strict=True)
     assert cfg.clean == CleanOptions(strict=True, retry=2, clear_internal_garbage=False)
-    assert cfg.daemon == DaemonOptions(strict=True)
-    assert cfg.output == OutputOptions(
-        quiet=True, no_color=True, include_digest_list=True
-    )
     assert cfg.registries == (
         RegistryConfig(
             name="alpha",
@@ -156,6 +140,34 @@ def test_load_accepts_string_path(tmp_path: Path) -> None:
     path = _write(tmp_path, _MINIMAL)
     cfg = load_config(str(path))
     assert cfg.registries[0].name == "alpha"
+
+
+def test_scan_strict_default_is_false(tmp_path: Path) -> None:
+    cfg = load_config(_write(tmp_path, _MINIMAL))
+    assert cfg.scan.strict is False
+
+
+def test_scan_strict_can_be_true(tmp_path: Path) -> None:
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        "schema_version = 1\n[scan]\nstrict = true",
+    )
+    cfg = load_config(_write(tmp_path, body))
+    assert cfg.scan.strict is True
+
+
+def test_clean_strict_default_is_false(tmp_path: Path) -> None:
+    cfg = load_config(_write(tmp_path, _MINIMAL))
+    assert cfg.clean.strict is False
+
+
+def test_clean_strict_can_be_true(tmp_path: Path) -> None:
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        "schema_version = 1\n[clean]\nstrict = true",
+    )
+    cfg = load_config(_write(tmp_path, body))
+    assert cfg.clean.strict is True
 
 
 # ---------- load_config: validation errors ---------------------------------
@@ -228,24 +240,38 @@ def test_unknown_redis_key_raises(tmp_path: Path) -> None:
         load_config(_write(tmp_path, body))
 
 
-def test_daemon_schedule_no_longer_accepted(tmp_path: Path) -> None:
-    # ``schedule`` is now controlled by RCD_SCHEDULE; reject it in TOML so the
-    # user is not surprised when an in-file value silently has no effect.
+def test_unknown_scan_key_raises(tmp_path: Path) -> None:
+    # ``verify_digest`` was a placeholder for a feature that never shipped; it
+    # is now rejected so users do not silently expect it to work.
     body = _MINIMAL.replace(
         "schema_version = 1",
-        'schema_version = 1\n[daemon]\nschedule = "0 4 * * *"',
+        "schema_version = 1\n[scan]\nverify_digest = true",
     )
-    with pytest.raises(ConfigError, match="schedule"):
+    with pytest.raises(ConfigError, match="verify_digest"):
         load_config(_write(tmp_path, body))
 
 
-def test_daemon_auto_clean_no_longer_accepted(tmp_path: Path) -> None:
-    # ``auto_clean`` is now controlled by RCD_DAEMON_AUTO_CLEAN.
+def test_daemon_section_now_rejected(tmp_path: Path) -> None:
+    # The whole [daemon] section moved to environment variables
+    # (RCD_SCHEDULE, RCD_DAEMON_AUTO_CLEAN, RCD_DAEMON_STRICT). Reject it
+    # in TOML so the user is not surprised when an in-file value silently
+    # has no effect.
     body = _MINIMAL.replace(
         "schema_version = 1",
-        "schema_version = 1\n[daemon]\nauto_clean = true",
+        "schema_version = 1\n[daemon]\nstrict = true",
     )
-    with pytest.raises(ConfigError, match="auto_clean"):
+    with pytest.raises(ConfigError, match="daemon"):
+        load_config(_write(tmp_path, body))
+
+
+def test_output_section_now_rejected(tmp_path: Path) -> None:
+    # The [output] section was never read by the CLI. Reject it so the
+    # config does not advertise behaviour that does not exist.
+    body = _MINIMAL.replace(
+        "schema_version = 1",
+        "schema_version = 1\n[output]\nquiet = true",
+    )
+    with pytest.raises(ConfigError, match="output"):
         load_config(_write(tmp_path, body))
 
 
@@ -306,6 +332,44 @@ def test_find_config_cwd_when_no_env(
     monkeypatch.chdir(tmp_path)
 
     assert find_config(explicit=None) == cwd_cfg
+
+
+def test_find_config_xdg_when_no_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # When no explicit, no env, and no cwd-local file, fall back to
+    # $XDG_CONFIG_HOME/registry-cache-doctor/config.toml.
+    empty_cwd = tmp_path / "cwd"
+    empty_cwd.mkdir()
+    xdg = tmp_path / "xdg"
+    rcd_dir = xdg / "registry-cache-doctor"
+    rcd_dir.mkdir(parents=True)
+    cfg = _write(rcd_dir, _MINIMAL, name="config.toml")
+
+    monkeypatch.delenv("RCD_CONFIG", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.chdir(empty_cwd)
+
+    assert find_config(explicit=None) == cfg
+
+
+def test_find_config_user_home_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # When XDG_CONFIG_HOME is unset, fall back to ~/.config/...
+    empty_cwd = tmp_path / "cwd"
+    empty_cwd.mkdir()
+    home = tmp_path / "home"
+    rcd_dir = home / ".config" / "registry-cache-doctor"
+    rcd_dir.mkdir(parents=True)
+    cfg = _write(rcd_dir, _MINIMAL, name="config.toml")
+
+    monkeypatch.delenv("RCD_CONFIG", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(empty_cwd)
+
+    assert find_config(explicit=None) == cfg
 
 
 def test_find_config_returns_none_when_nothing_found(

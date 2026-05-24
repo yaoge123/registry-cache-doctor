@@ -25,9 +25,17 @@ from rcd.config import RegistryConfig
 # ---------------------------------------------------------------------------
 
 
-def _write_config(tmp_path: Path, registries: Iterable[dict[str, Any]]) -> Path:
+def _write_config(
+    tmp_path: Path,
+    registries: Iterable[dict[str, Any]],
+    *,
+    extra_sections: str = "",
+) -> Path:
     cfg = tmp_path / "rcd.toml"
     lines = ["schema_version = 1", ""]
+    if extra_sections:
+        lines.append(extra_sections.strip())
+        lines.append("")
     for r in registries:
         lines.append("[[registry]]")
         for key, value in r.items():
@@ -233,6 +241,75 @@ def test_scan_returns_one_when_config_missing(tmp_path: Path) -> None:
     assert rc == 1
 
 
+def test_scan_strict_default_from_toml_returns_three(
+    tmp_path: Path,
+    fake_factory: tuple[Any, dict[str, Any]],
+) -> None:
+    """When TOML sets [scan].strict=true and no CLI flag is given, exit 3."""
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    digest = "sha256:" + "aa" * 32
+    _make_blob_file(storage, digest, b"hi")
+
+    factory, _ = fake_factory
+    seed_client = factory(RegistryConfig(name="a", redis_host="fake", storage_path=str(storage)))
+    _seed_redis_global(seed_client, digest, size=1024, mediatype="application/octet-stream")
+    _seed_redis_repo(seed_client, "library/x", digest, mediatype="application/octet-stream")
+
+    cfg = _write_config(
+        tmp_path,
+        [{"name": "a", "redis_host": "fake", "storage_path": str(storage)}],
+        extra_sections="[scan]\nstrict = true\n",
+    )
+
+    with patch("rcd.cli.make_redis_factory", return_value=factory):
+        rc = main(["--config", str(cfg), "scan"])
+
+    assert rc == 3
+
+
+def test_scan_no_strict_overrides_toml_true(
+    tmp_path: Path,
+    fake_factory: tuple[Any, dict[str, Any]],
+) -> None:
+    """``--no-strict`` overrides ``[scan].strict = true`` in the TOML."""
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    digest = "sha256:" + "bb" * 32
+    _make_blob_file(storage, digest, b"hi")
+
+    factory, _ = fake_factory
+    seed_client = factory(RegistryConfig(name="a", redis_host="fake", storage_path=str(storage)))
+    _seed_redis_global(seed_client, digest, size=1024, mediatype="application/octet-stream")
+    _seed_redis_repo(seed_client, "library/x", digest, mediatype="application/octet-stream")
+
+    cfg = _write_config(
+        tmp_path,
+        [{"name": "a", "redis_host": "fake", "storage_path": str(storage)}],
+        extra_sections="[scan]\nstrict = true\n",
+    )
+
+    with patch("rcd.cli.make_redis_factory", return_value=factory):
+        rc = main(["--config", str(cfg), "scan", "--no-strict"])
+
+    # CLI override beats TOML: drift only -> 2.
+    assert rc == 2
+
+
+def test_scan_rejects_quiet_flag_now_removed(tmp_path: Path) -> None:
+    cfg = tmp_path / "rcd.toml"
+    cfg.write_text("schema_version = 1\n")
+    with pytest.raises(SystemExit):
+        main(["--config", str(cfg), "scan", "--quiet"])
+
+
+def test_scan_rejects_verify_digest_flag_now_removed(tmp_path: Path) -> None:
+    cfg = tmp_path / "rcd.toml"
+    cfg.write_text("schema_version = 1\n")
+    with pytest.raises(SystemExit):
+        main(["--config", str(cfg), "scan", "--verify-digest"])
+
+
 # ---------------------------------------------------------------------------
 # clean
 # ---------------------------------------------------------------------------
@@ -317,6 +394,33 @@ def test_clean_apply_strict_zero_when_no_failures(
 
     with patch("rcd.cli.make_redis_factory", return_value=factory):
         rc = main(["--config", str(cfg), "clean", "--apply", "--strict"])
+
+    assert rc == 0
+
+
+def test_clean_strict_default_from_toml_used_when_no_cli_flag(
+    tmp_path: Path,
+    fake_factory: tuple[Any, dict[str, Any]],
+) -> None:
+    """``[clean].strict = true`` in TOML is honoured when no CLI flag set.
+
+    With clean-apply succeeding (failed=0), strict still returns 0; this
+    locks in the wiring (no AttributeError, default reaches the helper).
+    """
+    storage = tmp_path / "storage"
+    storage.mkdir()
+
+    factory, _ = fake_factory
+    factory(RegistryConfig(name="a", redis_host="fake", storage_path=str(storage)))
+
+    cfg = _write_config(
+        tmp_path,
+        [{"name": "a", "redis_host": "fake", "storage_path": str(storage)}],
+        extra_sections="[clean]\nstrict = true\n",
+    )
+
+    with patch("rcd.cli.make_redis_factory", return_value=factory):
+        rc = main(["--config", str(cfg), "clean", "--apply"])
 
     assert rc == 0
 

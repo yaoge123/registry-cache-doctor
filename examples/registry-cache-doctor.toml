@@ -6,9 +6,24 @@
 #   1. The path passed via `--config`
 #   2. The path in the `RCD_CONFIG` environment variable
 #   3. `./registry-cache-doctor.toml`
-#   4. `~/.config/registry-cache-doctor/config.toml`
+#   4. `$XDG_CONFIG_HOME/registry-cache-doctor/config.toml`
+#   5. `~/.config/registry-cache-doctor/config.toml`
 #
-# Any field commented out below uses its built-in default.
+# Two kinds of configuration coexist by design:
+#
+# * Deployment-level (how the container is wired up) lives in
+#   environment variables consumed by entrypoint.sh:
+#     - RCD_CONFIG              path to this file inside the container
+#     - RCD_SCHEDULE            cron expression for daemon mode
+#                               (default "0 3 * * *")
+#     - RCD_DAEMON_AUTO_CLEAN   "true" appends `clean --apply` after each
+#                               scheduled scan (default "false")
+#     - RCD_DAEMON_STRICT       "true" adds `--strict` to the scheduled
+#                               scan/clean (default "false")
+#
+# * Behavioural defaults travel with the configuration and live in this
+#   file. Per-invocation CLI flags (`--strict / --no-strict`,
+#   `--apply`, `--parallel`) override the values here.
 
 schema_version = 1
 
@@ -28,48 +43,23 @@ pipeline_batch = 200
 # 0 = scan all enabled registries in parallel.
 # Any positive integer caps concurrency at that number.
 parallel = 0
-# Recompute sha256 of each blob to detect digest mismatches.
-# Expensive (re-reads the entire blob); leave off for routine use.
-verify_digest = false
+# Default for `rcd scan --strict / --no-strict`. When true, `scan`
+# exits 3 if any C4/C5 real failure is found. When false, drift only
+# reports exit 2.
+strict = false
 
 # ----- Clean options ---------------------------------------------------------
 [clean]
-# When true, `clean` exits with code 4 if any (repo, digest) entry could
-# not be removed even after retries. When false (default), permanent
-# failures are still logged but do not affect the exit code.
+# Default for `rcd clean --strict / --no-strict`. When true, `clean`
+# exits 4 if any (repo, digest) entry could not be removed even after
+# retries. When false (default), permanent failures are logged but do
+# not affect the exit code.
 strict = false
 # How many times to retry the failed (repo, digest) pairs from a batch.
 retry = 1
 # Whether to clear the C1/C2/C3/C6 "internal garbage" categories in
 # addition to the C4/C5 real-failure categories. C7 is never touched.
 clear_internal_garbage = true
-
-# ----- Daemon options --------------------------------------------------------
-# Daemon scheduling and auto-clean are *deployment-level* concerns, set via
-# the container's environment variables (consumed by entrypoint.sh):
-#
-#   RCD_SCHEDULE             cron expression supercronic understands
-#                            (default: "0 3 * * *", daily at 03:00)
-#   RCD_DAEMON_AUTO_CLEAN    "true" to append `clean --apply` after each scan
-#                            (default: "false", scan-only)
-#
-# Only behavioural switches that should travel with the configuration belong
-# here. Setting `schedule` or `auto_clean` in TOML is rejected as an error
-# to avoid silent precedence surprises.
-[daemon]
-# When true, the daemon's scheduled `scan` exits 3 if it finds any C4/C5
-# real failure, and (when AUTO_CLEAN is on) exits 4 on permanent clean
-# failure. When false, the daemon stays at exit code 0 for all drift; the
-# wrapper still rewrites `2 -> 0` so cron does not log false alarms.
-strict = false
-
-# ----- Output ----------------------------------------------------------------
-[output]
-quiet = false
-no_color = false
-# When true, scan events include a (capped) list of digests per
-# category. Off by default; use `rcd inspect` for full detail.
-include_digest_list = false
 
 # ----- Registries ------------------------------------------------------------
 # Each registry instance gets one [[registry]] block.
